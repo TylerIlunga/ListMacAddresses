@@ -31,7 +31,7 @@ const int2ip = ipInt => {
 /** CREDIT: jppommet */
 
 const getEstimatedPingProcessingTime = pingRange => {
-  return `~${Math.round(pingRange / 60 / 60)}`;
+  return `~${Math.round(pingRange * pingSleepPeriod / 60)}`;
 };
 
 const handleExecErrors = (type, procedure, error) => {
