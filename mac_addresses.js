@@ -17,8 +17,9 @@ const subnetMaskRegex = /[0x]+[0-9a-f]+/g;
 const ipSubnetCommand = "ifconfig en0 | grep 'inet '";
 const pingSleepPeriod = 3;
 const pingCommand = ip => `ping -t ${pingSleepPeriod} ${ip}`;
-const arpCommand = 'arp -n -x -a > node parseArpOutput.js';
-const openCSVFileCommand = 'open ./data/results.csv';
+const arpCommand =
+  'touch ./data/Results.csv temp.txt && arp -n -x -a > temp.txt && node parseArpOutput.js < temp.txt && rm temp.txt';
+const openCSVFileCommand = 'open ./data/Results.csv';
 
 /** CREDIT: jppommet */
 const ip2int = ip => {
@@ -162,10 +163,6 @@ const handleARPOutput = (error, stdout, stderr) => {
   if (stderr) {
     handleExecErrors('StdError', 'handleARPOutput', stderr);
   }
-  if (stdout.length === 0) {
-    return exec(arpCommand, handleARPOutput);
-  }
-
   console.log('Opening csv file with results');
   exec(openCSVFileCommand, handleOpeningCSVFIle);
 };
