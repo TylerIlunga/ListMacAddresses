@@ -1,4 +1,4 @@
-const { exec } = require('child_process').execSync;
+const { exec, execSync } = require('child_process');
 // 0) Workthrough
 // 1) GET OUT IP ADDRESS
 // 2) GET SUBNET MASK
@@ -15,12 +15,10 @@ const { exec } = require('child_process').execSync;
 const ipRegex = /(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/gi;
 const subnetMaskRegex = /[0x]+[0-9a-f]+/g;
 const ipSubnetCommand = "ifconfig en0 | grep 'inet '";
-const pingCommand = ip => `ping -t 2 ${ip}`;
-const arpCommand = 'arp -a';
-const missingMACAddressesRegex = [
-  /[at]+[\s+][(incomplete)]+/gi,
-  /[--]+[\s+][no]+[\s+][entry]+/gi,
-];
+const pingSleepPeriod = 3;
+const pingCommand = ip => `ping -t ${pingSleepPeriod} ${ip}`;
+const arpCommand = 'arp -n -x -a > node parseArpOutput.js';
+const openCSVFileCommand = 'open ./data/results.csv';
 
 /** CREDIT: jppommet */
 const ip2int = ip => {
@@ -87,17 +85,36 @@ const extractNetworkBits = (ipString, broacastAddress, subnetMaskString) => {
   };
 };
 
-const gatherAndStoreMACAddresses = arpOutput => {};
+const handleExecErrors = (type, procedure, error) => {
+  if (process.env.PROD) {
+    return;
+  }
+  switch (type) {
+    case 'ExecError':
+      return console.error(`EXEC ERROR(${procedure}): `, error);
+    case 'StdError':
+      return console.error(`STDERR(${procedure}): `, error);
+  }
+};
+
+const handleOpeningCSVFIle = (error, stdout, stderr) => {
+  if (error) {
+    handleExecErrors('ExecError', 'handleOpeningCSVFIle', error);
+  }
+  if (stderr) {
+    handleExecErrors('StdError', 'handleOpeningCSVFIle', stderr);
+  }
+};
 
 const handleIPSubnetOutput = (error, stdout, stderr) => {
   if (error) {
-    return console.error('ERROR(handleIPSubnetOutput): ', error);
+    handleExecErrors('ExecError', 'handleIPSubnetOutput', error);
   }
   if (stderr) {
-    return console.error('STDERR(handleIPSubnetOutput): ', stderr);
+    handleExecErrors('StdError', 'handleIPSubnetOutput', stderr);
   }
+
   stdout = stdout.trim();
-  console.log('IP,Subnet Mask, Broadcast Address: ', stdout);
 
   const {
     ipString,
@@ -110,34 +127,48 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
     subnetMaskString,
   );
 
+  console.log('Pinging all possible machines in the network...');
   for (let i = 0; i <= pingRange; i++) {
     exec(pingCommand(int2ip(networkBits + i)), handlePingOutput);
   }
 
-  exec(arpCommand, handleARPOutput);
+  let timer = pingSleepPeriod;
+  console.log(`Executing in ${timer} seconds due to running process...`);
+  console.log(`Executing ARP command to parse for MAC Addresses in ${timer}`);
+  timer--;
+  const countdownInterval = setInterval(() => {
+    console.log(timer);
+    timer--;
+  }, timer);
+  setTimeout(() => {
+    clearInterval(countdownInterval);
+    exec(arpCommand, handleARPOutput);
+  }, timer * 1000);
 };
 
 const handlePingOutput = (error, stdout, stderr) => {
-  const handleError = e => console.error('ERROR: Pinging IP failed.', e);
   if (error) {
-    handleError(error);
+    handleExecErrors('ExecError', 'handlePingOutput', error);
   }
   if (stderr) {
-    handleError(stderr);
+    handleExecErrors('StdError', 'handlePingOutput', stderr);
   }
-  console.log('PING COMMAND STDOUT::', stdout);
 };
 
 const handleARPOutput = (error, stdout, stderr) => {
-  const handleError = e => console.error('ERROR: Executing ARP command.', e);
   if (error) {
-    handleError(error);
+    handleExecErrors('ExecError', 'handleARPOutput', error);
   }
   if (stderr) {
-    handleError(stderr);
+    handleExecErrors('StdError', 'handleARPOutput', stderr);
   }
-  console.log('ARP COMMAND STDOUT::', stdout.trim());
-  gatherAndStoreMACAddresses(stdout);
+  if (stdout.length === 0) {
+    return exec(arpCommand, handleARPOutput);
+  }
+
+  console.log('Opening csv file with results');
+  exec(openCSVFileCommand, handleOpeningCSVFIle);
 };
 
+console.log('Gather IP, Subnet Mask, and Broadcast Address...');
 exec(ipSubnetCommand, handleIPSubnetOutput);
