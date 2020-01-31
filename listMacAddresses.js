@@ -31,7 +31,7 @@ const int2ip = ipInt => {
 /** CREDIT: jppommet */
 
 const getEstimatedPingProcessingTime = pingRange => {
-  return `~${Math.round(pingRange * pingSleepPeriod / 60)}`;
+  return `~${Math.round((pingRange * pingSleepPeriod) / 60)}`;
 };
 
 const handleExecErrors = (type, procedure, error) => {
@@ -79,7 +79,9 @@ const extractIPSubnetMaskAndBroadcastAddress = ipSubnetOutput => {
 };
 
 const extractNetworkBits = (ipString, broacastAddress, subnetMaskString) => {
-  const networkBits = ip2int(ipString) & parseInt(subnetMaskString, 16);
+  const networkBits = ip2int(
+    int2ip(ip2int(ipString) & parseInt(subnetMaskString, 16)),
+  );
   return {
     networkBits,
     pingRange: ip2int(broacastAddress) - networkBits,
@@ -106,6 +108,15 @@ const handleARPOutput = (error, stdout, stderr) => {
   exec(openCSVFileCommand, handleOpeningCSVFIle);
 };
 
+const handlePingOutput = (error, stdout, stderr) => {
+  if (error) {
+    handleExecErrors('ExecError', 'handlePingOutput', error);
+  }
+  if (stderr) {
+    handleExecErrors('StdError', 'handlePingOutput', stderr);
+  }
+};
+
 const handleIPSubnetOutput = (error, stdout, stderr) => {
   if (error) {
     handleExecErrors('ExecError', 'handleIPSubnetOutput', error);
@@ -125,29 +136,32 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
     subnetMaskString,
   );
 
-  console.log('Pinging all possible machines in the network...');
+  console.log(`Pinging all ${pingRange} possible machines in the network...`);
   console.log(
     `Estimated time: ${getEstimatedPingProcessingTime(pingRange)} mins`,
   );
 
   for (let i = 0; i <= pingRange; i++) {
     // NOTE:: Async nature requires a delay for all processes to complete ping command...
-    // exec(pingCommand(int2ip(networkBits + i)), handlePingOutput);
     const ip = int2ip(networkBits + i);
     console.log('Pinging', ip);
-    try {
-      execSync(pingCommand(ip));
-    } catch (error) {
-      console.log(process.env.LOG ? error : `Failed to ping ${ip}`);
+    if (process.env.ASYNC) {
+      exec(pingCommand(ip), handlePingOutput);
+    } else {
+      try {
+        execSync(pingCommand(ip));
+      } catch (error) {
+        console.log(process.env.LOG ? error : `Failed to ping ${ip}`);
+      }
     }
   }
 
   console.log(
-    `Executing ARP command to parse for MAC Addresses in 10 seconds due to running process...`,
+    `Executing ARP command to parse for MAC Addresses in 5 seconds due to running process...`,
   );
   setTimeout(() => {
     exec(arpCommand, handleARPOutput);
-  }, 10000);
+  }, 5000);
 };
 
 console.log('Gather IP, Subnet Mask, and Broadcast Address...');
