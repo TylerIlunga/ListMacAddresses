@@ -145,7 +145,7 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
     // NOTE:: Async nature requires a delay for all processes to complete ping command...
     const ip = int2ip(networkBits + i);
     console.log('Pinging', ip);
-    if (process.env.ASYNC) {
+    if (!process.env.SYNC) {
       exec(pingCommand(ip), handlePingOutput);
     } else {
       try {
