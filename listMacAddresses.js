@@ -58,7 +58,7 @@ const captureValue = (type, ipSubnetOutput) => {
   }
   if (!match || match.length === 0) {
     throw new Error(
-      'Invalid output from matching ipSubnetCommand:',
+      'Invalid output from matching ipSubnetOutput:',
       ipSubnetOutput,
     );
   }
@@ -66,15 +66,12 @@ const captureValue = (type, ipSubnetOutput) => {
 };
 
 const extractIPSubnetMaskAndBroadcastAddress = ipSubnetOutput => {
-  // inet 10.27.224.185 netmask 0xffff0000 broadcast 10.27.255.255
-  const subnetMaskString = captureValue('subnetMask', ipSubnetOutput)[0];
+  // Example: inet 10.27.224.185 netmask 0xffff0000 broadcast 10.27.255.255
   const ipb = captureValue('ip/broadcast', ipSubnetOutput);
-  const ipString = ipb[0];
-  const broadcastAddress = ipb[1];
   return {
-    ipString,
-    broadcastAddress,
-    subnetMaskString,
+    ipString: ipb[0],
+    broadcastAddress: ipb[1],
+    subnetMaskString: captureValue('subnetMask', ipSubnetOutput)[0],
   };
 };
 
@@ -154,6 +151,10 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
         console.log(process.env.LOG ? error : `Failed to ping ${ip}`);
       }
     }
+  }
+
+  if (process.env.SYNC) {
+    return exec(arpCommand, handleARPOutput);
   }
 
   console.log(
