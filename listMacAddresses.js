@@ -30,8 +30,10 @@ const int2ip = ipInt => {
 };
 /** CREDIT: jppommet */
 
-const getEstimatedPingProcessingTime = pingRange => {
-  return `~${Math.round((pingRange * pingSleepPeriod) / 60)}`;
+const sleep = (time, cb) => {
+  const stop = new Date().getTime();
+  while (new Date().getTime() < stop + time) {}
+  cb();
 };
 
 const handleExecErrors = (type, procedure, error) => {
@@ -114,6 +116,23 @@ const handlePingOutput = (error, stdout, stderr) => {
   }
 };
 
+const handleAsyncBursts = (ip, index, pingRange) => {
+  // NOTE:: Async nature requires a delay for all processes to complete ping command...
+  exec(pingCommand(ip), handlePingOutput);
+  if (pingRange > 2 ** 8 && index !== 0 && index % 255 == 0) {
+    console.log('sleeping for 30 seconds for child processes to resolve....');
+    sleep(30000, () => console.log('timeout elasped'));
+  }
+};
+
+const handleSyncBursts = ip => {
+  try {
+    execSync(pingCommand(ip));
+  } catch (error) {
+    console.log(process.env.LOG ? error : `Failed to ping ${ip}`);
+  }
+};
+
 const handleIPSubnetOutput = (error, stdout, stderr) => {
   if (error) {
     handleExecErrors('ExecError', 'handleIPSubnetOutput', error);
@@ -134,35 +153,15 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
   );
 
   console.log(`Pinging all ${pingRange} possible machines in the network...`);
-  console.log(
-    `Estimated time: ${getEstimatedPingProcessingTime(pingRange)} mins`,
-  );
-
   for (let i = 0; i <= pingRange; i++) {
-    // NOTE:: Async nature requires a delay for all processes to complete ping command...
     const ip = int2ip(networkBits + i);
     console.log('Pinging', ip);
-    if (!process.env.SYNC) {
-      exec(pingCommand(ip), handlePingOutput);
-    } else {
-      try {
-        execSync(pingCommand(ip));
-      } catch (error) {
-        console.log(process.env.LOG ? error : `Failed to ping ${ip}`);
-      }
-    }
+    !process.env.SYNC
+      ? handleAsyncBursts(ip, i, pingRange)
+      : handleSyncBursts(ip);
   }
 
-  if (process.env.SYNC) {
-    return exec(arpCommand, handleARPOutput);
-  }
-
-  console.log(
-    `Executing ARP command to parse for MAC Addresses in 5 seconds due to running process...`,
-  );
-  setTimeout(() => {
-    exec(arpCommand, handleARPOutput);
-  }, 5000);
+  exec(arpCommand, handleARPOutput);
 };
 
 console.log('Gather IP, Subnet Mask, and Broadcast Address...');
