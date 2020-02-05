@@ -116,13 +116,30 @@ const handlePingOutput = (error, stdout, stderr) => {
   }
 };
 
-const handleAsyncBursts = (ip, index, pingRange) => {
-  // NOTE:: Async nature requires a delay for all processes to complete ping command...
-  exec(pingCommand(ip), handlePingOutput);
-  if (pingRange > 2 ** 8 && index !== 0 && index % 255 == 0) {
-    console.log('sleeping for 30 seconds for child processes to resolve....');
-    sleep(30000, () => console.log('timeout elasped'));
+const handleAsyncBursts = (ip, index, cache, reversed) => {
+  // TODO: Resolve issue with child processes.
+  const cp = exec(pingCommand(ip), handlePingOutput);
+  const pix = cache.get('prevIndex');
+  if (Math.abs(index - pix) < 2 ** 10) {
+    return cache.set(index, cp.pid);
   }
+
+  console.log('terminating persisting child processes...');
+  let j = reversed ? pix : index - 1;
+  const loopCondition = () => (reversed ? j < pix : j > pix);
+  const iteration = () => (reversed ? j++ : j--);
+  for (j; loopCondition(); iteration()) {
+    const onLast = reversed ? j + 1 == pix : j - 1 == pix;
+    const next = reversed ? j + 1 : j - 1;
+    if (onLast && cache.get(next) !== undefined) {
+      process.kill(cache.get(next), 'SIGKILL');
+    } else if (cache.get(j) !== undefined) {
+      process.kill(cache.get(j), 'SIGKILL');
+    }
+    cache.delete(onLast ? cache.get(next) : j);
+  }
+
+  cache.set('prevIndex', index);
 };
 
 const handleSyncBursts = ip => {
@@ -153,11 +170,20 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
   );
 
   console.log(`Pinging all ${pingRange} possible machines in the network...`);
-  for (let i = 0; i <= pingRange; i++) {
-    const ip = int2ip(networkBits + i);
+  const reversed = process.env.REVERSE;
+  let index = reversed ? pingRange : 0;
+  let prevIndex = index;
+  const loopCondition = () => (reversed ? index >= 0 : index <= pingRange);
+  const iteration = () => (reversed ? index-- : index++);
+  const cache = new Map();
+
+  cache.set('prevIndex', index);
+
+  for (index; loopCondition(); iteration()) {
+    const ip = int2ip(networkBits + index);
     console.log('Pinging', ip);
     !process.env.SYNC
-      ? handleAsyncBursts(ip, i, pingRange)
+      ? handleAsyncBursts(ip, index, cache, reversed)
       : handleSyncBursts(ip);
   }
 
