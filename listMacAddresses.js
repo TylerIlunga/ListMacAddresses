@@ -117,7 +117,7 @@ const handlePingOutput = (error, stdout, stderr) => {
 };
 
 const handleAsyncBursts = (ip, index, cache, reversed) => {
-  // TODO: Resolve issue with child processes.
+  // TODO: Resolve issue with child processes(issue with open files limit)
   const cp = exec(pingCommand(ip), handlePingOutput);
   const pix = cache.get('prevIndex');
   if (Math.abs(index - pix) < 2 ** 10) {
