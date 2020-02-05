@@ -125,7 +125,7 @@ const handleAsyncBursts = (ip, index, cache, reversed) => {
   }
 
   console.log('terminating persisting child processes...');
-  let j = reversed ? pix : index - 1;
+  let j = reversed ? index + 1 : index - 1;
   const loopCondition = () => (reversed ? j < pix : j > pix);
   const iteration = () => (reversed ? j++ : j--);
   for (j; loopCondition(); iteration()) {
