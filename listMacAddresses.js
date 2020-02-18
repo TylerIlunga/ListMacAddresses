@@ -117,7 +117,8 @@ const handlePingOutput = (error, stdout, stderr) => {
 };
 
 const handleAsyncBursts = (ip, index, cache, reversed) => {
-  // TODO: Resolve issue with child processes(issue with open files limit)
+  // To resolve issue with your system's open files limit.
+  // https://github.com/wilsonmar/mac-setup/blob/master/configs/limit.maxfiles.plist
   const cp = exec(pingCommand(ip), handlePingOutput);
   const pix = cache.get('prevIndex');
   if (Math.abs(index - pix) < 2 ** 10) {
