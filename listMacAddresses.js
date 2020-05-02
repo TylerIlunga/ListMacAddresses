@@ -3,21 +3,21 @@ const ipRegex = /(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(?:25[0
 const subnetMaskRegex = /[0x]+[0-9a-f]+/g;
 const ipSubnetCommand = "ifconfig en0 | grep 'inet '";
 const pingSleepPeriod = process.env.PING_PERIOD || 1;
-const pingCommand = ip => `ping -t ${pingSleepPeriod} ${ip}`;
+const pingCommand = (ip) => `ping -t ${pingSleepPeriod} ${ip}`;
 const arpCommand =
   'touch ./data/Results.csv temp.txt && arp -n -x -a > temp.txt && node parseArpOutput.js < temp.txt && rm temp.txt';
 const openCSVFileCommand = 'open ./data/Results.csv';
 
 /** CREDIT: jppommet */
-const ip2int = ip => {
+const ip2int = (ip) => {
   return (
-    ip.split('.').reduce(function(ipInt, octet) {
+    ip.split('.').reduce(function (ipInt, octet) {
       return (ipInt << 8) + parseInt(octet, 10);
     }, 0) >>> 0
   );
 };
 
-const int2ip = ipInt => {
+const int2ip = (ipInt) => {
   return (
     (ipInt >>> 24) +
     '.' +
@@ -67,7 +67,7 @@ const captureValue = (type, ipSubnetOutput) => {
   return match;
 };
 
-const extractIPSubnetMaskAndBroadcastAddress = ipSubnetOutput => {
+const extractIPSubnetMaskAndBroadcastAddress = (ipSubnetOutput) => {
   // Example: inet 10.27.224.185 netmask 0xffff0000 broadcast 10.27.255.255
   const ipb = captureValue('ip/broadcast', ipSubnetOutput);
   return {
@@ -116,34 +116,13 @@ const handlePingOutput = (error, stdout, stderr) => {
   }
 };
 
-const handleAsyncBursts = (ip, index, cache, reversed) => {
+const handleAsyncBursts = (ip) => {
   // To resolve issue with your system's open files limit.
   // https://github.com/wilsonmar/mac-setup/blob/master/configs/limit.maxfiles.plist
-  const cp = exec(pingCommand(ip), handlePingOutput);
-  const pix = cache.get('prevIndex');
-  if (Math.abs(index - pix) < 2 ** 10) {
-    return cache.set(index, cp.pid);
-  }
-
-  console.log('terminating persisting child processes...');
-  let j = reversed ? index + 1 : index - 1;
-  const loopCondition = () => (reversed ? j < pix : j > pix);
-  const iteration = () => (reversed ? j++ : j--);
-  for (j; loopCondition(); iteration()) {
-    const onLast = reversed ? j + 1 == pix : j - 1 == pix;
-    const next = reversed ? j + 1 : j - 1;
-    if (onLast && cache.get(next) !== undefined) {
-      process.kill(cache.get(next), 'SIGKILL');
-    } else if (cache.get(j) !== undefined) {
-      process.kill(cache.get(j), 'SIGKILL');
-    }
-    cache.delete(onLast ? cache.get(next) : j);
-  }
-
-  cache.set('prevIndex', index);
+  exec(pingCommand(ip), handlePingOutput);
 };
 
-const handleSyncBursts = ip => {
+const handleSyncBursts = (ip) => {
   try {
     execSync(pingCommand(ip));
   } catch (error) {
@@ -173,19 +152,13 @@ const handleIPSubnetOutput = (error, stdout, stderr) => {
   console.log(`Pinging all ${pingRange} possible machines in the network...`);
   const reversed = process.env.REVERSE;
   let index = reversed ? pingRange : 0;
-  let prevIndex = index;
   const loopCondition = () => (reversed ? index >= 0 : index <= pingRange);
   const iteration = () => (reversed ? index-- : index++);
-  const cache = new Map();
-
-  cache.set('prevIndex', index);
 
   for (index; loopCondition(); iteration()) {
     const ip = int2ip(networkBits + index);
     console.log('Pinging', ip);
-    !process.env.SYNC
-      ? handleAsyncBursts(ip, index, cache, reversed)
-      : handleSyncBursts(ip);
+    !process.env.SYNC ? handleAsyncBursts(ip) : handleSyncBursts(ip);
   }
 
   exec(arpCommand, handleARPOutput);
